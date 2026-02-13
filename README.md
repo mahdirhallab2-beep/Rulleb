@@ -484,6 +484,7 @@
                 const targetIndex = HOURS_SIMPLE.indexOf(targetHour);
                 if (targetIndex === -1) return null;
                 
+                // البحث عن ساعات فارغة بعد الساعة المطلوبة
                 for (let i = targetIndex + 1; i < HOURS_SIMPLE.length; i++) {
                     const hour = HOURS_SIMPLE[i];
                     if (isSlotAvailable(day, hour)) {
@@ -491,6 +492,7 @@
                     }
                 }
                 
+                // البحث عن ساعات فارغة قبل الساعة المطلوبة
                 for (let i = targetIndex - 1; i >= 0; i--) {
                     const hour = HOURS_SIMPLE[i];
                     if (isSlotAvailable(day, hour)) {
@@ -554,10 +556,13 @@
             function bookMatchForPlayers(cat, day, originalHour, playersList) {
                 console.log(`🎯 محاولة حجز مباراة لـ ${playersList.length} لاعب في ${day} ${originalHour}`);
                 
+                // التحقق مما إذا كانت الساعة محجوزة بالفعل
                 if (!isSlotAvailable(day, originalHour)) {
+                    // البحث عن أقرب ساعة فارغة
                     const nearestHour = findNearestAvailableHour(day, originalHour);
                     
                     if (nearestHour) {
+                        // إنشاء مباراة في الساعة البديلة
                         const newMatch = {
                             id: 'M' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
                             day: day,
@@ -573,6 +578,7 @@
                         
                         matches.push(newMatch);
                         
+                        // حذف اللاعبين من قائمة الانتظار
                         const idsToRemove = playersList.map(p => p.id);
                         players = players.filter(p => !idsToRemove.includes(p.id));
                         
@@ -589,6 +595,7 @@
                         return false;
                     }
                 } else {
+                    // الساعة متوفرة - حجز المباراة مباشرة
                     const newMatch = {
                         id: 'M' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
                         day: day,
@@ -602,6 +609,7 @@
                     
                     matches.push(newMatch);
                     
+                    // حذف اللاعبين من قائمة الانتظار
                     const idsToRemove = playersList.map(p => p.id);
                     players = players.filter(p => !idsToRemove.includes(p.id));
                     
@@ -652,6 +660,7 @@
                         return;
                     }
 
+                    // التحقق من وجود اللاعب مسبقاً في نفس اليوم والساعة
                     const existingPlayer = players.find(p => 
                         p.name.toLowerCase() === name.toLowerCase() && 
                         p.day === day && 
@@ -663,6 +672,7 @@
                         return;
                     }
 
+                    // إنشاء لاعب جديد
                     const newPlayer = {
                         id: Date.now() + '-' + Math.random().toString(36).substr(2, 5),
                         name: name,
@@ -677,7 +687,21 @@
                     console.log('تم إضافة اللاعب:', newPlayer);
                     
                     if (saveAll()) {
-                        checkAndBookMatchIfFull(cat, day, hour);
+                        // التحقق من اكتمال 12 لاعب في هذه الفئة وهذا اليوم وهذه الساعة
+                        const candidates = players.filter(p => 
+                            p.targetCategory === cat && 
+                            p.day === day && 
+                            p.hour === hour
+                        );
+                        
+                        console.log(`👥 عدد اللاعبين في ${day} ${hour} فئة ${cat}: ${candidates.length}`);
+                        
+                        if (candidates.length >= 12) {
+                            // حجز المباراة لأول 12 لاعب
+                            const playersToBook = candidates.slice(0, 12);
+                            bookMatchForPlayers(cat, day, hour, playersToBook);
+                        }
+                        
                         renderAll();
                         
                         const hourDisplay = getHourDisplay(hour);
@@ -692,33 +716,7 @@
                 }
             }
 
-            // -------------------- التحقق من اكتمال 12 لاعب --------------------
-            function checkAndBookMatchIfFull(cat, day, hour) {
-                let candidates = players.filter(p => 
-                    p.targetCategory === cat && 
-                    p.day === day && 
-                    p.hour === hour
-                );
-                
-                console.log(`👥 عدد اللاعبين في ${day} ${hour} فئة ${cat}: ${candidates.length}`);
-                
-                while (candidates.length >= 12) {
-                    const playersToBook = candidates.slice(0, 12);
-                    const booked = bookMatchForPlayers(cat, day, hour, playersToBook);
-                    
-                    if (booked) {
-                        candidates = players.filter(p => 
-                            p.targetCategory === cat && 
-                            p.day === day && 
-                            p.hour === hour
-                        );
-                    } else {
-                        break;
-                    }
-                }
-            }
-
-            // -------------------- حجز مباراة جاهزة (مصححة) --------------------
+            // -------------------- حجز مباراة جاهزة --------------------
             function bookReady() {
                 try {
                     const day = document.getElementById('readyDay').value;
@@ -997,7 +995,7 @@
                 let html = '';
                 
                 DAYS.forEach(day => {
-                    html += `<div class="schedule-day" onclick="window.openDeleteModalFromSchedule('${day}')">`;
+                    html += `<div class="schedule-day">`;
                     html += `<span class="day-title"><i class="fas fa-calendar-alt"></i> ${day}</span>`;
                     html += `<div class="hours-container">`;
                     
@@ -1047,12 +1045,30 @@
                         html += `<p style="color: #0f6872; text-align: center; padding: 10px;">لا يوجد لاعبين في الانتظار</p>`;
                     } else {
                         html += `<div class="player-list">`;
-                        catPlayers.sort((a,b) => (a.day + a.hour).localeCompare(b.day + b.hour)).forEach(p => {
+                        // تجميع اللاعبين حسب اليوم والساعة
+                        const grouped = {};
+                        catPlayers.forEach(p => {
+                            const key = `${p.day}-${p.hour}`;
+                            if (!grouped[key]) grouped[key] = [];
+                            grouped[key].push(p);
+                        });
+                        
+                        // عرض المجموعات
+                        Object.keys(grouped).sort().forEach(key => {
+                            const group = grouped[key];
+                            const p = group[0];
                             const hourDisplay = getHourDisplay(p.hour);
-                            html += `<div class="player-row">
-                                        <span><i class="fas fa-user"></i> ${p.name} (${p.age})</span>
-                                        <span class="player-day"><i class="fas fa-clock"></i> ${p.day} ${hourDisplay}</span>
+                            const count = group.length;
+                            html += `<div class="player-row" style="background: #e3f2f5; margin-bottom: 10px;">
+                                        <span><i class="fas fa-users"></i> ${p.day} ${hourDisplay} (${count} لاعب)</span>
+                                        <span class="player-day">${count}/12</span>
                                     </div>`;
+                            group.forEach(player => {
+                                html += `<div class="player-row" style="margin-right: 20px; background: white;">
+                                            <span><i class="fas fa-user"></i> ${player.name} (${player.age})</span>
+                                            <span class="player-day"></span>
+                                        </div>`;
+                            });
                         });
                         html += `</div>`;
                     }
