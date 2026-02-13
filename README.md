@@ -46,7 +46,7 @@
         .schedule-day:hover { background: #e3f2f5; }
         .day-title { font-weight: 800; color: #0a6e79; background: #d7f0f3; display: inline-block; padding: 6px 22px; border-radius: 40px; margin-bottom: 14px; font-size: 1.1rem; }
         .hours-container { display: flex; flex-wrap: wrap; gap: 8px; }
-        .hour-item { background: #e7f3f5; border-radius: 40px; padding: 8px 12px; font-size: 0.85rem; font-weight: 600; color: #0e5a63; display: inline-flex; align-items: center; gap: 5px; border: 1px solid #b7dce0; flex: 0 0 auto; }
+        .hour-item { background: #e7f3f5; border-radius: 40px; padding: 8px 12px; font-size: 0.85rem; font-weight: 600; color: #0e5a63; display: inline-flex; align-items: center; gap: 5px; border: 1px solid #b7dce0; flex: 0 0 auto; cursor: pointer; }
         .hour-booked { background: #edd7d0; color: #612e24; border-color: #c9998a; }
         .hour-ready { background: #b7dfe3; color: #09505a; border-color: #69aeb6; }
         .invite-badge { background: #0f6e78; color: white; padding: 2px 12px; border-radius: 30px; font-size: 0.7rem; font-weight: 700; margin-right: 5px; }
@@ -94,6 +94,40 @@
             letter-spacing: 3px;
             width: 100%;
             margin: 10px 0;
+        }
+        
+        .delete-options {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        
+        .delete-option-btn {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #0a6e79;
+            background: white;
+            color: #0a6e79;
+            border-radius: 40px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.1s;
+        }
+        
+        .delete-option-btn.active {
+            background: #0a6e79;
+            color: white;
+        }
+        
+        .match-info {
+            background: #e3f2f5;
+            border-radius: 30px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: center;
+            font-weight: 700;
+            color: #0a6e79;
+            border: 2px solid #0a6e79;
         }
         
         @media (max-width: 600px) { 
@@ -272,11 +306,19 @@
                 <div class="modal-title">
                     <i class="fas fa-trash-alt" style="color: #b5624b;"></i> حذف المباراة
                 </div>
-                <p id="modalMatchInfo" style="font-weight: 600; margin-bottom: 15px;"></p>
-                <div style="margin-bottom: 15px;">
-                    <label>أدخل كود المباراة</label>
-                    <input type="password" id="deleteCode" placeholder="كود المباراة" style="width: 100%; margin-top: 8px;">
+                
+                <div id="modalMatchInfo" class="match-info"></div>
+                
+                <div class="delete-options" id="deleteOptions">
+                    <button class="delete-option-btn active" id="adminCodeOption">كود الإدارة</button>
+                    <button class="delete-option-btn" id="matchCodeOption">كود المباراة</button>
                 </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <label id="deleteCodeLabel">أدخل كود الإدارة</label>
+                    <input type="password" id="deleteCode" placeholder="كود الحذف" style="width: 100%; margin-top: 8px;" maxlength="6">
+                </div>
+                
                 <div class="modal-buttons">
                     <button class="btn btn-warning" id="confirmDeleteBtn" style="width: 50%;">حذف</button>
                     <button class="btn btn-outline" id="cancelDeleteBtn" style="width: 50%;">إلغاء</button>
@@ -308,8 +350,8 @@
         (function() {
             "use strict";
 
-            // ========== التخزين السحابي - شغال 100% ==========
-            const STORAGE_URL = 'https://api.npoint.io/31952159e3d7777b176b'; // 👈 هذا الرابط حقك
+            // ========== التخزين السحابي ==========
+            const STORAGE_URL = 'https://api.npoint.io/31952159e3d7777b176b';
 
             // -------------------- الإعدادات الأساسية --------------------
             const HOURS_SIMPLE = [];
@@ -326,7 +368,7 @@
             
             const DAYS = ['الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
             const AGE_CATEGORIES = ['12-15', '15-18', '18-24', '24-35', '35plus'];
-            const ADMIN_CODE = '1001'; // كود الإدارة الجديد
+            const ADMIN_CODE = '1001';
 
             // -------------------- البيانات --------------------
             let players = [];
@@ -391,11 +433,9 @@
                 }
             }
 
-            // شغل التحميل
             loadData();
             setInterval(saveData, 5000);
 
-            // عدل دالة saveAll
             function saveAll() {
                 saveData();
                 return true;
@@ -484,7 +524,6 @@
                 const targetIndex = HOURS_SIMPLE.indexOf(targetHour);
                 if (targetIndex === -1) return null;
                 
-                // البحث عن ساعات فارغة بعد الساعة المطلوبة
                 for (let i = targetIndex + 1; i < HOURS_SIMPLE.length; i++) {
                     const hour = HOURS_SIMPLE[i];
                     if (isSlotAvailable(day, hour)) {
@@ -492,7 +531,6 @@
                     }
                 }
                 
-                // البحث عن ساعات فارغة قبل الساعة المطلوبة
                 for (let i = targetIndex - 1; i >= 0; i--) {
                     const hour = HOURS_SIMPLE[i];
                     if (isSlotAvailable(day, hour)) {
@@ -556,13 +594,10 @@
             function bookMatchForPlayers(cat, day, originalHour, playersList) {
                 console.log(`🎯 محاولة حجز مباراة لـ ${playersList.length} لاعب في ${day} ${originalHour}`);
                 
-                // التحقق مما إذا كانت الساعة محجوزة بالفعل
                 if (!isSlotAvailable(day, originalHour)) {
-                    // البحث عن أقرب ساعة فارغة
                     const nearestHour = findNearestAvailableHour(day, originalHour);
                     
                     if (nearestHour) {
-                        // إنشاء مباراة في الساعة البديلة
                         const newMatch = {
                             id: 'M' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
                             day: day,
@@ -578,7 +613,6 @@
                         
                         matches.push(newMatch);
                         
-                        // حذف اللاعبين من قائمة الانتظار
                         const idsToRemove = playersList.map(p => p.id);
                         players = players.filter(p => !idsToRemove.includes(p.id));
                         
@@ -595,7 +629,6 @@
                         return false;
                     }
                 } else {
-                    // الساعة متوفرة - حجز المباراة مباشرة
                     const newMatch = {
                         id: 'M' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
                         day: day,
@@ -609,7 +642,6 @@
                     
                     matches.push(newMatch);
                     
-                    // حذف اللاعبين من قائمة الانتظار
                     const idsToRemove = playersList.map(p => p.id);
                     players = players.filter(p => !idsToRemove.includes(p.id));
                     
@@ -660,7 +692,6 @@
                         return;
                     }
 
-                    // التحقق من وجود اللاعب مسبقاً في نفس اليوم والساعة
                     const existingPlayer = players.find(p => 
                         p.name.toLowerCase() === name.toLowerCase() && 
                         p.day === day && 
@@ -672,7 +703,6 @@
                         return;
                     }
 
-                    // إنشاء لاعب جديد
                     const newPlayer = {
                         id: Date.now() + '-' + Math.random().toString(36).substr(2, 5),
                         name: name,
@@ -687,7 +717,6 @@
                     console.log('تم إضافة اللاعب:', newPlayer);
                     
                     if (saveAll()) {
-                        // التحقق من اكتمال 12 لاعب في هذه الفئة وهذا اليوم وهذه الساعة
                         const candidates = players.filter(p => 
                             p.targetCategory === cat && 
                             p.day === day && 
@@ -697,7 +726,6 @@
                         console.log(`👥 عدد اللاعبين في ${day} ${hour} فئة ${cat}: ${candidates.length}`);
                         
                         if (candidates.length >= 12) {
-                            // حجز المباراة لأول 12 لاعب
                             const playersToBook = candidates.slice(0, 12);
                             bookMatchForPlayers(cat, day, hour, playersToBook);
                         }
@@ -731,19 +759,16 @@
                         return;
                     }
                     
-                    // التحقق من توفر الساعة
                     if (!isSlotAvailable(day, hour)) {
                         showMsg('❌ هذه الساعة محجوزة بالفعل لمباراة أخرى', false);
                         return;
                     }
                     
-                    // التحقق من عدم تكرار الكود
                     if (isCodeExists(code)) {
                         showMsg('❌ هذا الكود مستخدم مسبقاً، اختر كود آخر', false);
                         return;
                     }
 
-                    // إنشاء المباراة الجاهزة
                     const newMatch = {
                         id: 'R' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
                         day: day,
@@ -775,8 +800,8 @@
                 }
             }
 
-            // -------------------- حذف مباراة --------------------
-            function deleteMatch(day, hour, inputCode) {
+            // -------------------- حذف مباراة (محدث - بدون إظهار الكود) --------------------
+            function deleteMatch(day, hour, inputCode, deleteMethod = 'admin') {
                 try {
                     const match = matches.find(m => m.day === day && m.hour === hour);
                     if (!match) {
@@ -784,29 +809,39 @@
                         return false;
                     }
 
-                    // المباريات الجاهزة تحتاج كود صحيح
-                    if (match.type === 'ready') {
-                        if (match.code == inputCode) {
-                            matches = matches.filter(m => !(m.day === day && m.hour === hour));
-                            saveAll();
-                            renderAll();
-                            if (isAdminUnlocked) renderAdmin();
-                            showMsg('✅ تم حذف المباراة الجاهزة بنجاح');
-                            return true;
-                        } else {
-                            showMsg('❌ كود المباراة غير صحيح', false);
+                    // التحقق من كود الحذف حسب الطريقة المختارة
+                    let isValidDelete = false;
+                    
+                    if (deleteMethod === 'admin') {
+                        // حذف بكود الإدارة (لجميع أنواع المباريات)
+                        isValidDelete = (inputCode === ADMIN_CODE);
+                        if (!isValidDelete) {
+                            showMsg('❌ كود الإدارة غير صحيح', false);
                             return false;
                         }
-                    } 
-                    // المباريات العادية يمكن حذفها بدون كود
-                    else if (match.type === 'normal') {
-                        matches = matches.filter(m => !(m.day === day && m.hour === hour));
-                        saveAll();
-                        renderAll();
-                        if (isAdminUnlocked) renderAdmin();
-                        showMsg('✅ تم حذف المباراة العادية بنجاح');
-                        return true;
+                    } else {
+                        // حذف بكود المباراة (للمباريات الجاهزة فقط)
+                        if (match.type === 'ready') {
+                            isValidDelete = (match.code == inputCode);
+                            if (!isValidDelete) {
+                                showMsg('❌ كود المباراة غير صحيح', false);
+                                return false;
+                            }
+                        } else {
+                            showMsg('❌ المباريات العادية لا يمكن حذفها بكود المباراة', false);
+                            return false;
+                        }
                     }
+
+                    // تنفيذ الحذف
+                    matches = matches.filter(m => !(m.day === day && m.hour === hour));
+                    saveAll();
+                    renderAll();
+                    if (isAdminUnlocked) renderAdmin();
+                    
+                    showMsg('✅ تم حذف المباراة بنجاح');
+                    return true;
+                    
                 } catch (e) {
                     console.error('خطأ في حذف المباراة:', e);
                     showMsg('❌ حدث خطأ أثناء حذف المباراة', false);
@@ -814,19 +849,39 @@
                 }
             }
 
-            // -------------------- فتح نافذة الحذف --------------------
+            // -------------------- فتح نافذة الحذف (محدث - بدون إظهار الكود) --------------------
             function openDeleteModal(day, hour) {
                 const match = matches.find(m => m.day === day && m.hour === hour);
                 if (!match) {
                     showMsg('❌ لا يمكن حذف ساعة فارغة', false);
                     return;
                 }
+                
                 currentDeleteDay = day;
                 currentDeleteHour = hour;
+                currentDeleteMethod = 'admin'; // الطريقة الافتراضية
                 
                 const modalMatchInfo = document.getElementById('modalMatchInfo');
                 if (modalMatchInfo) {
-                    modalMatchInfo.innerHTML = `حذف مباراة ${day} ${hour}<br>النوع: ${match.type === 'ready' ? 'جاهزة' : 'عادية'}`;
+                    let matchType = match.type === 'ready' ? 'مباراة جاهزة' : 'مباراة عادية';
+                    modalMatchInfo.innerHTML = `${matchType}<br>${day} ${getHourDisplay(hour)}`;
+                }
+                
+                // تحديث واجهة خيارات الحذف
+                const deleteOptions = document.getElementById('deleteOptions');
+                const adminCodeOption = document.getElementById('adminCodeOption');
+                const matchCodeOption = document.getElementById('matchCodeOption');
+                const deleteCodeLabel = document.getElementById('deleteCodeLabel');
+                
+                // إظهار خيارات الحذف للمباريات الجاهزة فقط
+                if (match.type === 'ready') {
+                    deleteOptions.style.display = 'flex';
+                    adminCodeOption.classList.add('active');
+                    matchCodeOption.classList.remove('active');
+                    deleteCodeLabel.innerText = 'أدخل كود الإدارة';
+                } else {
+                    deleteOptions.style.display = 'none';
+                    deleteCodeLabel.innerText = 'أدخل كود الإدارة';
                 }
                 
                 const deleteCode = document.getElementById('deleteCode');
@@ -995,7 +1050,7 @@
                 let html = '';
                 
                 DAYS.forEach(day => {
-                    html += `<div class="schedule-day">`;
+                    html += `<div class="schedule-day" onclick="event.stopPropagation()">`;
                     html += `<span class="day-title"><i class="fas fa-calendar-alt"></i> ${day}</span>`;
                     html += `<div class="hours-container">`;
                     
@@ -1045,7 +1100,6 @@
                         html += `<p style="color: #0f6872; text-align: center; padding: 10px;">لا يوجد لاعبين في الانتظار</p>`;
                     } else {
                         html += `<div class="player-list">`;
-                        // تجميع اللاعبين حسب اليوم والساعة
                         const grouped = {};
                         catPlayers.forEach(p => {
                             const key = `${p.day}-${p.hour}`;
@@ -1053,7 +1107,6 @@
                             grouped[key].push(p);
                         });
                         
-                        // عرض المجموعات
                         Object.keys(grouped).sort().forEach(key => {
                             const group = grouped[key];
                             const p = group[0];
@@ -1107,7 +1160,7 @@
                         <td>${m.day}</td>
                         <td>${hourDisplay}</td>
                         <td>${typeDisplay}</td>
-                        <td style="direction: ltr; font-family: monospace;">${m.code || '—'}</td>`;
+                        <td style="direction: ltr; font-family: monospace;">${m.code || '--'}</td>`;
                     
                     if (m.type === 'ready' && m.code) {
                         html += `<td><button class="btn-sm btn-warning" style="width: auto; padding: 6px 16px;" onclick="deleteReadyCodeFromAdmin('${m.code}', '${m.day}', '${m.hour}')"><i class="fas fa-trash"></i> حذف</button></td>`;
@@ -1215,12 +1268,13 @@
                     });
                 }
 
+                // أحداث نافذة الحذف
                 const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
                 if (confirmDeleteBtn) {
                     confirmDeleteBtn.addEventListener('click', function() {
                         const deleteCode = document.getElementById('deleteCode');
                         if (currentDeleteDay && currentDeleteHour && deleteCode) {
-                            deleteMatch(currentDeleteDay, currentDeleteHour, deleteCode.value);
+                            deleteMatch(currentDeleteDay, currentDeleteHour, deleteCode.value, currentDeleteMethod);
                             document.getElementById('deleteModal').style.display = 'none';
                             deleteCode.value = '';
                         }
@@ -1236,6 +1290,29 @@
                     });
                 }
 
+                // أحداث خيارات الحذف
+                const adminCodeOption = document.getElementById('adminCodeOption');
+                const matchCodeOption = document.getElementById('matchCodeOption');
+                const deleteCodeLabel = document.getElementById('deleteCodeLabel');
+                
+                if (adminCodeOption) {
+                    adminCodeOption.addEventListener('click', function() {
+                        adminCodeOption.classList.add('active');
+                        matchCodeOption.classList.remove('active');
+                        deleteCodeLabel.innerText = 'أدخل كود الإدارة';
+                        currentDeleteMethod = 'admin';
+                    });
+                }
+                
+                if (matchCodeOption) {
+                    matchCodeOption.addEventListener('click', function() {
+                        matchCodeOption.classList.add('active');
+                        adminCodeOption.classList.remove('active');
+                        deleteCodeLabel.innerText = 'أدخل كود المباراة';
+                        currentDeleteMethod = 'match';
+                    });
+                }
+
                 window.addEventListener('click', function(e) {
                     if (e.target.classList.contains('modal')) {
                         document.getElementById('deleteModal').style.display = 'none';
@@ -1246,6 +1323,7 @@
 
             let currentDeleteDay = null;
             let currentDeleteHour = null;
+            let currentDeleteMethod = 'admin';
             let isAdminUnlocked = false;
             
             init();
